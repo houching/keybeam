@@ -4,11 +4,11 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   pull_request:
     branches:
       - main
-  release:
-    types: [published]
 
 jobs:
   build:
@@ -75,19 +75,29 @@ jobs:
           cd server
           python -m PyInstaller --onefile --noconsole --name KeyBeam --icon=icon.ico --version-file=version_info.txt --add-data "../client/dist;client_dist" app.py
 
-      # 7. Upload Built Artifact
-      - name: Upload KeyBeam.exe Artifact
+      # 7. Create Portable Zip Archive
+      - name: Create Portable Zip
+        run: Compress-Archive -Path server/dist/KeyBeam.exe -DestinationPath server/dist/KeyBeam.zip
+
+      # 8. Upload Built Artifacts
+      - name: Upload KeyBeam Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: KeyBeam-Windows-Standalone
-          path: server/dist/KeyBeam.exe
+          name: KeyBeam-Windows-Portable
+          path: |
+            server/dist/KeyBeam.exe
+            server/dist/KeyBeam.zip
           if-no-files-found: error
 
-      # 8. Upload to GitHub Releases (Optional, only triggers on actual Tag Release publish)
+      # 9. Auto-Create Release & Upload Binary (triggers on 'v*' tag pushes)
       - name: Upload Binary to Release
-        if: github.event_name == 'release'
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: server/dist/KeyBeam.exe
+          files: |
+            server/dist/KeyBeam.exe
+            server/dist/KeyBeam.zip
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
