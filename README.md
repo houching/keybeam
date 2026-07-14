@@ -113,15 +113,20 @@ You can compile both the Vue Web Client and the Python Server into a **single, s
    *This compiles the Vue app into static assets inside `/client/dist`.*
 
 2. **Compile to Standalone windowless `.exe`**:
-   Compile the Python server using `uv run`, embedding the client web assets and compiling without a CMD prompt window (`--noconsole`):
+   Compile the Python server using `uv run`, embedding the client web assets, attaching the custom icon, embedding version metadata, and compiling without a CMD prompt window (`--noconsole`):
    ```bash
    cd ../server
-   uv run --with pyinstaller --with pystray --with pillow --with websockets --with pyautogui --with pynput python -m PyInstaller --onefile --noconsole --add-data "../client/dist;client_dist" app.py
+   # Generate icon.ico and version_info.txt assets
+   uv run --with pillow generate_ico.py
+   uv run create_version_info.py
+
+   # Compile KeyBeam.exe
+   uv run --with pyinstaller --with pystray --with pillow --with websockets --with pyautogui --with pynput python -m PyInstaller --onefile --noconsole --name KeyBeam --icon=icon.ico --version-file=version_info.txt --add-data "../client/dist;client_dist" app.py
    ```
 
 3. **Run the Binary**:
-   - The compiled standalone executable will be saved in `server/dist/app.exe`.
-   - Double-clicking `app.exe` launches the complete **KeyBeam** ecosystem in the background (no console window will appear).
+   - The compiled standalone executable will be saved in `server/dist/KeyBeam.exe`.
+   - Double-clicking `KeyBeam.exe` launches the complete **KeyBeam** ecosystem in the background (no console window will appear).
    - A neon green scanner icon will appear in your **Windows System Tray** (near the clock).
    - **Right-click the System Tray Icon** to:
      - **Open Web Client**: Launches `http://localhost:5173/` in your default browser.
