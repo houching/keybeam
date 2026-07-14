@@ -110,7 +110,7 @@ onMounted(() => {
     serverIp.value = savedIp;
   } else {
     // Guess default IP range
-    serverIp.value = '192.168.1.100';
+    serverIp.value = '10.0.0.15';
   }
 
   // Detect decoder support

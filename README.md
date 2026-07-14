@@ -10,18 +10,14 @@ A 2-part utility designed to turn your mobile phone's camera into a physical bar
 
 The Python server runs on your Windows computer, listens for incoming barcode payloads, and types them into whatever window currently has focus (e.g. Notepad, Excel, or your web POS).
 
-1. Ensure Python 3.8+ is installed on your Windows machine.
+1. Ensure you have `uv` installed on your Windows machine.
 2. Open PowerShell/CMD and navigate to the `/server` folder:
    ```bash
    cd server
    ```
-3. Install dependencies:
+3. Run the server using `uv`:
    ```bash
-   pip install -r requirements.txt
-   ```
-4. Start the server:
-   ```bash
-   python app.py
+   uv run app.py
    ```
 
 #### 🔍 Finding your Windows LAN IP Address
@@ -52,13 +48,13 @@ The client is a mobile-friendly Vue 3 + Vite application that accesses your came
    npm run dev
    ```
 4. The server will output a Local URL and a Network URL, e.g.:
-   - Local: `https://localhost:5173/`
-   - Network: `https://192.168.1.100:5173/`
+   - Local: `http://localhost:5173/`
+   - Network: `http://10.0.0.15:5173/`
 
 #### 📱 Opening Client on your Phone
 1. Connect your mobile phone to the **same Wi-Fi network** as your Windows PC.
-2. Open your mobile browser (Chrome/Edge on Android, Safari on iOS) and navigate to the **Network URL** shown in the terminal (e.g. `https://192.168.1.100:5173/`).
-   - *Note: Vite runs with HTTPS self-signed certificates so that the browser allows camera API access (`getUserMedia`). You might need to bypass the security warning in your mobile browser by tapping "Advanced" -> "Proceed anyway".*
+2. Open your mobile browser and navigate to the **Network URL** (e.g. `http://10.0.0.15:5173/` or your custom HTTPS proxy domain).
+   - *Note: Browsers require secure contexts (HTTPS or localhost) to access the device camera. Since Vite is running on plain HTTP, access it via your configured HTTPS proxy setup.*
 3. Once loaded, allow camera permissions when prompted.
 4. Input the Windows LAN IP in the server connection field and click **Connect**.
 5. Once status turns **Connected**, aim your camera at a barcode. It will instantly type it into the focused window on your Windows PC!

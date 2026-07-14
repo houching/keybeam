@@ -1,3 +1,11 @@
+# /// script
+# dependencies = [
+#   "websockets==12.0",
+#   "pyautogui==0.9.54",
+#   "pynput==1.7.6",
+# ]
+# ///
+
 import asyncio
 import json
 import logging
