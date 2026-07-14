@@ -1,0 +1,24 @@
+{
+  "name": "KeyBeam Barcode Bridge",
+  "short_name": "KeyBeam",
+  "description": "Wireless network barcode scanner bridge for Windows PC keyboard emulation.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090a0f",
+  "theme_color": "#090a0f",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

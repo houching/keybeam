@@ -1,0 +1,21 @@
+# Node
+node_modules/
+client/dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.uv/
+
+# PyInstaller
+server/build/
+server/dist/
+server/*.spec
+
+# OS
+.DS_Store
+Thumbs.db

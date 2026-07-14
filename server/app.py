@@ -3,6 +3,8 @@
 #   "websockets==12.0",
 #   "pyautogui==0.9.54",
 #   "pynput==1.7.6",
+#   "pystray==0.19.5",
+#   "pillow==10.4.0",
 # ]
 # ///
 
@@ -10,7 +12,13 @@ import asyncio
 import json
 import logging
 import sys
+import os
+import threading
 from datetime import datetime
+from http.server import SimpleHTTPRequestHandler, HTTPServer
+import webbrowser
+from PIL import Image, ImageDraw
+import pystray
 
 # Setup logging to stdout
 logging.basicConfig(
@@ -69,7 +77,7 @@ def emulate_typing(text: str):
         except Exception as e:
             logger.error(f"pynput typing error: {e}")
 
-async def handle_client(websocket, path):
+async def handle_client(websocket, path=None):
     """Handles messages from a connected client."""
     client_ip, client_port = websocket.remote_address
     logger.info(f"Client connected: {client_ip}:{client_port}")
@@ -104,17 +112,146 @@ async def handle_client(websocket, path):
     except Exception as e:
         logger.error(f"Unexpected connection error: {e}")
 
+import socket
+
+def is_port_in_use(port: int, host: str = "0.0.0.0") -> bool:
+    """Checks if a TCP port is already bound on the host."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((host, port))
+            return False
+        except OSError:
+            return True
+
+def show_error_dialog(title: str, message: str):
+    """Displays a native system popup error dialog."""
+    try:
+        from tkinter import messagebox, Tk
+        root = Tk()
+        root.withdraw()  # Hide main window
+        messagebox.showerror(title, message)
+        root.destroy()
+    except Exception as e:
+        logger.error(f"Failed to display system dialog: {e}")
+
+def start_static_file_server(directory: str, port: int = 5173):
+    """Launches a simple HTTP server in a daemon thread to host the client Web App."""
+    class CustomHTTPHandler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=directory, **kwargs)
+            
+        def log_message(self, format, *args):
+            # Suppress normal HTTP access logs to keep terminal logs clean
+            pass
+
+    try:
+        server = HTTPServer(('0.0.0.0', port), CustomHTTPHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        logger.info(f"Successfully started Web App server at http://localhost:{port}/")
+    except Exception as e:
+        logger.warning(f"Could not start static HTTP server: {e}")
+
 async def main():
-    port = 3000
+    ws_port = 3000
+    http_port = 5173
     host = "0.0.0.0"
-    logger.info(f"Starting WebSocket server on ws://{host}:{port}/ws...")
-    async with websockets.serve(handle_client, host, port):
+    
+    # Locate client web assets (check local folder or PyInstaller temporary bundle paths)
+    if getattr(sys, 'frozen', False):
+        base_path = sys._MEIPASS
+        dist_dir = os.path.join(base_path, 'client_dist')
+    else:
+        dist_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../client/dist')
+
+    has_client = os.path.exists(dist_dir)
+
+    # Validate Port Conflicts before opening any server
+    conflicts = []
+    if is_port_in_use(ws_port, host):
+        conflicts.append(f"Port {ws_port} (WebSocket server)")
+    if has_client and is_port_in_use(http_port, host):
+        conflicts.append(f"Port {http_port} (Web App client)")
+
+    if conflicts:
+        err_msg = (
+            f"KeyBeam is already running or another program is occupying the required ports:\n\n"
+            f"- {', '.join(conflicts)}\n\n"
+            f"Please close the other instance or program and try running KeyBeam again."
+        )
+        logger.critical(err_msg)
+        show_error_dialog("KeyBeam — Port Conflict", err_msg)
+        os._exit(1)
+
+    if has_client:
+        logger.info(f"Found compiled client web assets at: {dist_dir}")
+        start_static_file_server(dist_dir, port=http_port)
+    else:
+        logger.info("Compiled client web assets not found. WebSocket server will run standalone.")
+
+    logger.info(f"Starting WebSocket server on ws://{host}:{ws_port}/ws...")
+    async with websockets.serve(handle_client, host, ws_port):
         # Serve forever
         await asyncio.Future()
 
+def create_tray_image():
+    """Generates a 64x64 neon green circular scanner logo for the system tray."""
+    try:
+        # If there is a favicon.png or similar, we can try to load it
+        # Otherwise, dynamically draw a high-contrast neon scanner logo
+        image = Image.new('RGBA', (64, 64), color=(0, 0, 0, 0))
+        dc = ImageDraw.Draw(image)
+        # circular neon scan line
+        dc.ellipse([6, 6, 58, 58], outline=(0, 255, 127), width=5)
+        # scan laser dot in the center
+        dc.ellipse([26, 26, 38, 38], fill=(0, 255, 127))
+        return image
+    except Exception:
+        # Fallback to a solid color 64x64 image
+        return Image.new('RGB', (64, 64), color=(0, 255, 127))
+
+def setup_tray(loop):
+    """Initializes and starts the system tray icon on the main thread."""
+    def open_browser(icon, item):
+        webbrowser.open("http://localhost:5173")
+
+    def stop_all(icon, item):
+        logger.info("Stopping KeyBeam server via Tray menu...")
+        icon.stop()
+        try:
+            loop.call_soon_threadsafe(loop.stop)
+        except Exception:
+            pass
+        os._exit(0)
+
+    menu = pystray.Menu(
+        pystray.MenuItem("Open Web Client", open_browser),
+        pystray.MenuItem("Exit", stop_all)
+    )
+    
+    icon = pystray.Icon(
+        "KeyBeam",
+        create_tray_image(),
+        "KeyBeam Barcode Bridge",
+        menu
+    )
+    logger.info("System Tray Icon starting...")
+    icon.run()
+
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        # Initialize event loop
+        loop = asyncio.new_event_loop()
+        
+        # Start event loop in a background daemon thread
+        async_thread = threading.Thread(
+            target=lambda: loop.run_until_complete(main()), 
+            daemon=True
+        )
+        async_thread.start()
+        
+        # Start pystray system tray on the main thread (blocking)
+        setup_tray(loop)
     except KeyboardInterrupt:
         logger.info("Server stopped by user request.")
     except Exception as e:

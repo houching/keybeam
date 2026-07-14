@@ -1,14 +1,26 @@
-# KeyBeam (Web Client ⇆ Windows Keyboard Emulator)
+# KeyBeam (Web Client ⇆ Windows Keyboard Emulator) ⚡️👾
 
-A 2-part utility designed to turn your mobile phone's camera into a physical barcode scanner for your Windows PC, transmitting barcodes over a local network (LAN) and emulating them as hardware keystrokes.
+A 2-part wireless network utility designed to turn your mobile phone's camera into a physical barcode scanner. It transmits barcode scans over the local network (LAN) to a lightweight server running on your Windows PC, which instantly types them at your cursor as hardware keyboard inputs.
 
 ---
 
-## 🚀 Quick Start Guide
+## ✨ Features & Highlights
 
-### 1. Server Setup (Windows Host)
+- **⌨️ Keyboard Emulation**: Uses Python (`pyautogui`/`pynput`) to automatically type scanned barcodes into any active program (Notepad, Excel, POS, web form) and triggers a virtual `[Enter]` keystroke.
+- **📱 Premium Retro/Hacker Vibe**: Designed with a custom Cyberpunk Retro-Terminal pixel style using `VT323` and `Share Tech Mono` fonts. Includes sound feedback, haptic vibrations, and a green laser sweep animation.
+- **🌗 Custom Theme Switcher**: Persistently toggle between **Cyber Dark**, **Arcade Light**, and **Match System** themes.
+- **👁️ Zen Mode**: An icon-only toggle to hide headers, configurations, preferences, and history lists, leaving only the camera viewport and the neon scan readout active.
+- **📦 Progressive Web App (PWA)**: Installable as a standalone app on iOS/Android with offline capability using a **Stale-While-Revalidate** Service Worker.
+- **🛡️ Anti-Ghost Scan (Consecutive Frame Verification)**: Prevents garbled reads by requiring a barcode value to match identically across 2 consecutive camera frames. Toggable under settings.
+- **⚡ Dual-Decoder Pipeline**: Automatically runs native browser `BarcodeDetector` when available for maximum speed/battery efficiency, falling back to WebAssembly `zxing-wasm` dynamically when unsupported.
+- **🌐 Dual Language**: Built-in support for **English** and **Khmer (ខ្មែរ)**.
+- **🔒 Secure Proxy Ready**: Automatically resolves secure WebSocket (`wss://`) protocol paths under secure origins (like `https://keybeam.yourdomain.com/`) to prevent Mixed Content blocking.
 
-The Python server runs on your Windows computer, listens for incoming barcode payloads, and types them into whatever window currently has focus (e.g. Notepad, Excel, or your web POS).
+---
+
+## 🚀 Server Setup (Windows Host)
+
+The Python server runs on your Windows computer, listens for incoming barcode payloads, and types them into whatever window currently has focus.
 
 1. Ensure you have `uv` installed on your Windows machine.
 2. Open PowerShell/CMD and navigate to the `/server` folder:
@@ -21,19 +33,15 @@ The Python server runs on your Windows computer, listens for incoming barcode pa
    ```
 
 #### 🔍 Finding your Windows LAN IP Address
-Since the client phone needs to connect to the computer, you need to know the computer's LAN IP address:
-1. Open PowerShell/CMD and run:
-   ```powershell
-   ipconfig
-   ```
-2. Look for the **IPv4 Address** under your active connection (usually under `Wireless LAN adapter Wi-Fi` or `Ethernet adapter`).
-3. It will look like `192.168.x.x` or `10.0.x.x`. Keep this IP handy!
+1. Run `ipconfig` in PowerShell/CMD.
+2. Look for the **IPv4 Address** under your active adapter (usually `Wireless LAN adapter Wi-Fi` or `Ethernet adapter`).
+3. Keep this IP handy (e.g. `192.168.1.100`).
 
 ---
 
-### 2. Client Setup (Mobile Device)
+## 📱 Client Setup (Mobile Device)
 
-The client is a mobile-friendly Vue 3 + Vite application that accesses your camera, scans barcodes in real-time, and sends them to the server.
+The client is a mobile-friendly Vue 3 + Vite application.
 
 1. Open PowerShell/CMD and navigate to the `/client` folder:
    ```bash
@@ -43,26 +51,79 @@ The client is a mobile-friendly Vue 3 + Vite application that accesses your came
    ```bash
    npm install
    ```
-3. Start the Vite development server in host mode:
+3. Start the Vite development server:
    ```bash
    npm run dev
    ```
-4. The server will output a Local URL and a Network URL, e.g.:
-   - Local: `http://localhost:5173/`
-   - Network: `http://10.0.0.15:5173/`
+4. Access the network address shown (e.g. `http://192.168.1.100:5173/`).
 
-#### 📱 Opening Client on your Phone
-1. Connect your mobile phone to the **same Wi-Fi network** as your Windows PC.
-2. Open your mobile browser and navigate to the **Network URL** (e.g. `http://10.0.0.15:5173/` or your custom HTTPS proxy domain).
-   - *Note: Browsers require secure contexts (HTTPS or localhost) to access the device camera. Since Vite is running on plain HTTP, access it via your configured HTTPS proxy setup.*
-3. Once loaded, allow camera permissions when prompted.
-4. Input the Windows LAN IP in the server connection field and click **Connect**.
-5. Once status turns **Connected**, aim your camera at a barcode. It will instantly type it into the focused window on your Windows PC!
+#### 🔒 Resolving HTTPS & Mixed Content Blocks
+Mobile browsers require a **secure context (HTTPS)** to access device cameras. If you access the client via an HTTPS reverse proxy (like `https://keybeam.yourdomain.com/`), the browser blocks insecure WebSockets (`ws://`).
+
+Configure your HTTPS proxy to route `/ws` path requests straight to your local PC WebSocket port `3000`:
+
+##### Nginx Configuration:
+```nginx
+location /ws {
+    proxy_pass http://192.168.1.100:3000/ws;  # Replace with Windows PC IP
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "Upgrade";
+    proxy_set_header Host $host;
+}
+```
+
+##### Caddy Configuration:
+```caddy
+keybeam.yourdomain.com {
+    reverse_proxy /ws* 192.168.1.100:3000
+    reverse_proxy * localhost:5173
+}
+```
+
+##### 📲 Connecting Client to Server:
+1. Open the secure address on your phone (e.g. `https://keybeam.yourdomain.com/`).
+2. Accept camera permissions.
+3. In the host input field, simply enter your proxy domain name (e.g. **`keybeam.yourdomain.com`**) or local IP, then click **Connect**.
+4. The client will connect to `wss://keybeam.yourdomain.com/ws` securely and start scanning!
 
 ---
 
-## 🛠️ Key Configurations & Settings
-- **Language**: Supports English and Khmer translation toggling.
-- **Beep & Vibrate**: Configurable in the preferences section.
-- **Debounce Delay**: Delay to prevent duplicate scans (default is 1500ms).
-- **Decoder Fallback**: Utilizes `BarcodeDetector` Web API natively for hardware-level decoding, falling back to WebAssembly-based `zxing-wasm` if unsupported.
+## 🛠️ Preference Settings & Controls
+- **Beep on Scan**: Optional sound signal when barcode is decoded.
+- **Vibrate on Scan**: Optional haptic feedback.
+- **Laser Scan Line**: Toggle the visual animated scanning sweep line.
+- **Debounce Delay**: Adjustable range slider (500ms - 5000ms) to throttle duplicate scans.
+- **Anti-Ghost Scan**: Checkbox to require matching values across 2 consecutive frames.
+- **History List**: Collapsable (collapsed by default) scan history list with clipboard copy support.
+
+---
+
+## 📦 Single Standalone Binary Compilation
+
+You can compile both the Vue Web Client and the Python Server into a **single, standalone `.exe` binary** for easy distribution. When the compiled binary runs, it hosts the client web application (on port `5173`) and operates the WebSocket bridge (on port `3000`) simultaneously with **zero external dependencies**.
+
+### Build Instructions:
+
+1. **Build the Client Web Assets**:
+   ```bash
+   cd client
+   npm run build
+   ```
+   *This compiles the Vue app into static assets inside `/client/dist`.*
+
+2. **Compile to Standalone windowless `.exe`**:
+   Compile the Python server using `uv run`, embedding the client web assets and compiling without a CMD prompt window (`--noconsole`):
+   ```bash
+   cd ../server
+   uv run --with pyinstaller --with pystray --with pillow --with websockets --with pyautogui --with pynput python -m PyInstaller --onefile --noconsole --add-data "../client/dist;client_dist" app.py
+   ```
+
+3. **Run the Binary**:
+   - The compiled standalone executable will be saved in `server/dist/app.exe`.
+   - Double-clicking `app.exe` launches the complete **KeyBeam** ecosystem in the background (no console window will appear).
+   - A neon green scanner icon will appear in your **Windows System Tray** (near the clock).
+   - **Right-click the System Tray Icon** to:
+     - **Open Web Client**: Launches `http://localhost:5173/` in your default browser.
+     - **Exit**: Cleanly terminates the background HTTP and WebSocket servers.
+

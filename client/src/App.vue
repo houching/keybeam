@@ -21,6 +21,7 @@ const i18n = {
     cameraAccess: 'Camera Access',
     cameraActive: 'Camera is active',
     cameraStarting: 'Initializing camera...',
+    cameraStopped: 'Camera is turned off.',
     cameraErr: 'Camera error or permission denied.',
     selectCamera: 'Select Camera',
     nativeDecoder: 'Native Decoder',
@@ -56,6 +57,7 @@ const i18n = {
     cameraAccess: 'ការអនុញ្ញាតកាមេរ៉ា',
     cameraActive: 'កាមេរ៉ាកំពុងដំណើរការ',
     cameraStarting: 'កំពុងចាប់ផ្ដើមកាមេរ៉ា...',
+    cameraStopped: 'កាមេរ៉ាត្រូវបានបិទ។',
     cameraErr: 'កំហុសកាមេរ៉ា ឬមិនអនុញ្ញាត។',
     selectCamera: 'ជ្រើសរើសកាមេរ៉ា',
     nativeDecoder: 'កម្មវិធីស្កេនផ្ទាល់ (Native)',
@@ -100,6 +102,7 @@ const requireDoubleVerification = ref(true); // verify code in 2 consecutive fra
 const theme = ref(localStorage.getItem('kb_theme') || 'dark'); // 'dark' | 'light' | 'system'
 const showLaserLine = ref(localStorage.getItem('kb_show_laser') !== 'false'); // true by default
 const isZenMode = ref(false);
+const isPaused = ref(false);
 
 // Watch theme to update body class and localStorage
 watch(theme, (newTheme) => {
@@ -153,8 +156,8 @@ onMounted(() => {
   } else if (savedIp) {
     serverIp.value = savedIp;
   } else {
-    // Guess default IP range
-    serverIp.value = '10.0.0.15';
+    // Dynamic host fallback depending on what address the client accessed
+    serverIp.value = window.location.hostname || 'localhost';
   }
 
   // Detect decoder support
@@ -185,19 +188,29 @@ const connectWS = () => {
   wsStatus.value = 'connecting';
   localStorage.setItem('kb_server_ip', serverIp.value);
 
-  // Parse websocket target
-  const wsUrl = `wss://${serverIp.value}:3000/ws`; // Try wss first if client is HTTPS
-  const wsUrlPlain = `ws://${serverIp.value}:3000/ws`;
+  // Parse websocket target dynamically based on current page protocol
+  const isSecure = window.location.protocol === 'https:';
+  const protocol = isSecure ? 'wss:' : 'ws:';
+  const host = serverIp.value.trim();
   
-  // Create secure or non-secure depending on window protocol
-  const targetUrl = window.location.protocol === 'https:' ? wsUrl : wsUrlPlain;
+  let targetUrl = '';
+  if (host.startsWith('ws://') || host.startsWith('wss://')) {
+    targetUrl = host;
+  } else {
+    // If accessing via domain proxy, connect directly on the hostname without port 3000
+    if (host === window.location.hostname || host === window.location.host) {
+      targetUrl = `${protocol}//${host}/ws`;
+    } else {
+      targetUrl = `${protocol}//${host}:3000/ws`;
+    }
+  }
 
   try {
-    ws = new WebSocket(wsUrlPlain); // Use plain websocket as Python server handles ws://
+    ws = new WebSocket(targetUrl);
     
     ws.onopen = () => {
       wsStatus.value = 'connected';
-      console.log('WebSocket connected to', wsUrlPlain);
+      console.log('WebSocket connected to', targetUrl);
     };
 
     ws.onclose = () => {
@@ -302,6 +315,7 @@ const startCamera = async () => {
 };
 
 const stopCamera = () => {
+  isPaused.value = false;
   if (animationFrameId) {
     cancelAnimationFrame(animationFrameId);
     animationFrameId = null;
@@ -311,6 +325,16 @@ const stopCamera = () => {
     stream = null;
   }
   cameraStatus.value = 'stopped';
+};
+
+const togglePause = () => {
+  if (!videoElement.value) return;
+  isPaused.value = !isPaused.value;
+  if (isPaused.value) {
+    videoElement.value.pause();
+  } else {
+    videoElement.value.play().catch(e => console.error('Error playing video:', e));
+  }
 };
 
 // Audio feedback helper
@@ -394,7 +418,7 @@ const handleBarcodeFound = (codeValue) => {
 
 // Processing Loop
 const scanFrameLoop = async () => {
-  if (cameraStatus.value !== 'running' || !videoElement.value) {
+  if (cameraStatus.value !== 'running' || !videoElement.value || isPaused.value) {
     animationFrameId = requestAnimationFrame(scanFrameLoop);
     return;
   }
@@ -486,22 +510,22 @@ const clearHistory = () => {
       </div>
     </header>
 
-    <!-- Connection Status & IP Configuration Card -->
-    <section v-if="!isZenMode" class="glass-panel" style="padding: 16px; margin-bottom: 16px;">
-      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px;">
-        <span :class="['pulse-indicator', wsStatus === 'connected' ? 'pulse-connected' : 'pulse-disconnected']"></span>
-        <span style="font-weight: 600; font-size: 0.9rem;">
-          {{ wsStatus === 'connected' ? t('statusConnected') : (wsStatus === 'connecting' ? t('statusConnecting') : t('statusDisconnected')) }}
-        </span>
-      </div>
-
-      <div style="display: flex; gap: 8px;">
+    <!-- Connection Status & IP Configuration Card (One Row) -->
+    <section v-if="!isZenMode" class="glass-panel" style="padding: 12px; margin-bottom: 16px;">
+      <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
+        <span 
+          :class="['pulse-indicator', wsStatus === 'connected' ? 'pulse-connected' : 'pulse-disconnected']"
+          :title="wsStatus === 'connected' ? t('statusConnected') : (wsStatus === 'connecting' ? t('statusConnecting') : t('statusDisconnected'))"
+          style="flex-shrink: 0;"
+        ></span>
+        
         <div style="flex-grow: 1;">
           <input 
             type="text" 
             v-model="serverIp" 
             placeholder="e.g. 192.168.1.100" 
             class="ios-safe-input" 
+            style="height: 38px; padding: 6px 10px; font-size: 14px;"
             :disabled="wsStatus === 'connected'" 
           />
         </div>
@@ -510,17 +534,17 @@ const clearHistory = () => {
           v-if="wsStatus !== 'connected'"
           class="btn-primary" 
           @click="connectWS" 
-          style="flex-shrink: 0;"
+          style="flex-shrink: 0; height: 38px; min-height: 38px; min-width: 38px; padding: 6px 12px; font-size: 13px;"
         >
-          <svg class="icon-svg"><use xlink:href="#icon-rocket"></use></svg> {{ t('connect') }}
+          <svg class="icon-svg" style="margin-right: 4px;"><use xlink:href="#icon-rocket"></use></svg> {{ t('connect') }}
         </button>
         <button 
           v-else
           class="btn-danger" 
           @click="disconnectWS" 
-          style="flex-shrink: 0;"
+          style="flex-shrink: 0; height: 38px; min-height: 38px; min-width: 38px; padding: 6px 12px; font-size: 13px;"
         >
-          <svg class="icon-svg"><use xlink:href="#icon-stop"></use></svg> {{ t('disconnect') }}
+          <svg class="icon-svg" style="margin-right: 4px;"><use xlink:href="#icon-stop"></use></svg> {{ t('disconnect') }}
         </button>
       </div>
     </section>
@@ -549,29 +573,57 @@ const clearHistory = () => {
             <div style="margin-bottom: 8px;">
               <svg class="icon-svg" style="width: 32px; height: 32px;"><use xlink:href="#icon-camera"></use></svg>
             </div>
-            <div>{{ cameraStatus === 'starting' ? t('cameraStarting') : t('cameraErr') }}</div>
+            <div>{{ cameraStatus === 'starting' ? t('cameraStarting') : (cameraStatus === 'stopped' ? t('cameraStopped') : t('cameraErr')) }}</div>
           </div>
         </div>
       </div>
 
       <!-- Settings and Camera selectors -->
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
-        <select 
-          v-model="selectedDeviceId" 
-          @change="startCamera" 
-          class="ios-safe-input" 
-          style="flex-grow: 1; flex-basis: 150px; height: 38px; padding: 6px 12px; font-size: 14px;"
-        >
-          <option value="" disabled>{{ t('selectCamera') }}</option>
-          <option v-for="cam in cameraDevices" :key="cam.deviceId" :value="cam.deviceId">
-            {{ cam.label || `Camera ${cameraDevices.indexOf(cam) + 1}` }}
-          </option>
-        </select>
+        <div style="display: flex; gap: 8px; flex-grow: 1; flex-basis: 150px;">
+          <select 
+            v-model="selectedDeviceId" 
+            @change="startCamera" 
+            class="ios-safe-input" 
+            style="flex-grow: 1; height: 38px; padding: 6px 12px; font-size: 14px;"
+          >
+            <option value="" disabled>{{ t('selectCamera') }}</option>
+            <option v-for="cam in cameraDevices" :key="cam.deviceId" :value="cam.deviceId">
+              {{ cam.label || `Camera ${cameraDevices.indexOf(cam) + 1}` }}
+            </option>
+          </select>
+          
+          <button 
+            v-if="cameraStatus === 'running' || cameraStatus === 'starting'"
+            class="btn-secondary" 
+            style="height: 38px; min-height: 38px; min-width: 38px; padding: 6px;"
+            @click="togglePause"
+            title="Pause/Play"
+          >
+            <svg class="icon-svg"><use :xlink:href="isPaused ? '#icon-play' : '#icon-pause'"></use></svg>
+          </button>
 
-        <span style="font-size: 11px; background: rgba(255,255,255,0.06); padding: 4px 8px; border-radius: 4px; color: var(--text-muted);">
-          <svg class="icon-svg" style="width: 12px; height: 12px; margin-right: 2px;"><use xlink:href="#icon-history"></use></svg>
-          {{ decoderType === 'native' ? t('nativeDecoder') : t('fallbackDecoder') }}
-        </span>
+          <button 
+            v-if="cameraStatus === 'running' || cameraStatus === 'starting'"
+            class="btn-danger" 
+            style="height: 38px; min-height: 38px; min-width: 38px; padding: 6px;"
+            @click="stopCamera"
+            :title="t('disconnect')"
+          >
+            <svg class="icon-svg"><use xlink:href="#icon-stop"></use></svg>
+          </button>
+          <button 
+            v-else
+            class="btn-primary" 
+            style="height: 38px; min-height: 38px; min-width: 38px; padding: 6px;"
+            @click="startCamera"
+            :title="t('connect')"
+          >
+            <svg class="icon-svg"><use xlink:href="#icon-camera"></use></svg>
+          </button>
+        </div>
+
+        
       </div>
     </section>
 
