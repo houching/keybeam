@@ -51,7 +51,7 @@ jobs:
       - name: Install Dependencies & Generate Assets
         run: |
           cd server
-          uv pip install --system -r requirements.txt
+          uv pip install --system pyinstaller -r requirements.txt
           python generate_ico.py
           python create_version_info.py
 
