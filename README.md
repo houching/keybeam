@@ -1,6 +1,6 @@
 # KeyBeam (Web Client ⇆ Windows Keyboard Emulator) ⚡️👾
 
-![Build Status](https://github.com/houching/barcode-scanner/actions/workflows/build.yml/badge.svg)
+![Build Status](https://github.com/houching/keybeam/actions/workflows/build.yml/badge.svg)
 
 A 2-part wireless network utility designed to turn your mobile phone's camera into a physical barcode scanner. It transmits barcode scans over the local network (LAN) to a lightweight server running on your Windows PC, which instantly types them at your cursor as hardware keyboard inputs.
 
