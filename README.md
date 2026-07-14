@@ -1,4 +1,4 @@
-# Khmer Barcode Bridge (Web Client ⇆ Windows Keyboard Emulator)
+# KeyBeam (Web Client ⇆ Windows Keyboard Emulator)
 
 A 2-part utility designed to turn your mobile phone's camera into a physical barcode scanner for your Windows PC, transmitting barcodes over a local network (LAN) and emulating them as hardware keystrokes.
 

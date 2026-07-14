@@ -4,8 +4,8 @@ import { ref, onMounted, onUnmounted, watch } from 'vue';
 // i18n localization dictionary (easy translation support)
 const i18n = {
   en: {
-    title: 'Khmer Barcode Bridge',
-    subtitle: 'Scan barcodes to your Windows PC',
+    title: 'KeyBeam',
+    subtitle: 'Wireless Barcode Keyboard Bridge',
     serverIp: 'Server IP / Host',
     connect: 'Connect',
     disconnect: 'Disconnect',
@@ -30,10 +30,17 @@ const i18n = {
     vibrateLabel: 'Vibrate on Scan',
     debounceLabel: 'Debounce Delay (ms)',
     doubleVerifyLabel: 'Anti-Ghost Scan (require 2 reads)',
+    themeLabel: 'Interface Theme',
+    themeLight: 'Arcade Light',
+    themeDark: 'Cyber Dark',
+    themeSystem: 'Match System',
+    laserLabel: 'Laser Scan Line',
+    zenNormal: 'Normal Mode',
+    zenActive: 'Zen Mode',
   },
   kh: {
-    title: 'ស្កេនបាកូដភ្ជាប់ទៅកុំព្យូទ័រ',
-    subtitle: 'ស្កេនបាកូដបញ្ជូនទៅកាន់ Windows ផ្ទាល់',
+    title: 'KeyBeam',
+    subtitle: 'ស្កេនបាកូដបញ្ជូនទៅកុំព្យូទ័រឥតខ្សែ',
     serverIp: 'អាសយដ្ឋាន IP ម៉ាស៊ីនបម្រើ',
     connect: 'ភ្ជាប់',
     disconnect: 'ផ្ដាច់',
@@ -58,6 +65,13 @@ const i18n = {
     vibrateLabel: 'ញ័រទូរស័ព្ទពេលស្កេន',
     debounceLabel: 'រយៈពេលផ្អាកស្កេនស្ទួន (ms)',
     doubleVerifyLabel: 'ការពារស្កេនខុស (ត្រូវការស្កេន ២ដង)',
+    themeLabel: 'រូបរាង / ប្រធានបទ',
+    themeLight: 'ពន្លឺបែបហ្គេម',
+    themeDark: 'ងងឹតបែបបច្ចេកវិទ្យា',
+    themeSystem: 'តាមប្រព័ន្ធទូរស័ព្ទ',
+    laserLabel: 'បង្ហាញខ្សែឡាស៊ែរស្កេន',
+    zenNormal: 'របៀបធម្មតា',
+    zenActive: 'របៀបស្ងប់ស្ងាត់ (Zen)',
   }
 };
 
@@ -83,6 +97,20 @@ const beepOnScan = ref(true);
 const vibrateOnScan = ref(true);
 const debounceDelay = ref(1500); // 1.5s debounce default
 const requireDoubleVerification = ref(true); // verify code in 2 consecutive frames to prevent ghost/garbled scans
+const theme = ref(localStorage.getItem('kb_theme') || 'dark'); // 'dark' | 'light' | 'system'
+const showLaserLine = ref(localStorage.getItem('kb_show_laser') !== 'false'); // true by default
+const isZenMode = ref(false);
+
+// Watch theme to update body class and localStorage
+watch(theme, (newTheme) => {
+  localStorage.setItem('kb_theme', newTheme);
+  document.body.className = `theme-${newTheme}`;
+}, { immediate: true });
+
+// Watch laser toggle for persistence
+watch(showLaserLine, (val) => {
+  localStorage.setItem('kb_show_laser', val ? 'true' : 'false');
+});
 
 // Scanned history tracking
 const lastScanTime = ref(0);
@@ -99,6 +127,17 @@ let zxingReaderModule = null; // Lazy-loaded module helper
 
 // Load initial query params and local storage
 onMounted(() => {
+  // Fetch and inject SVG sprite dynamically to bypass browser/proxy rendering bugs
+  fetch('/icons.svg')
+    .then(r => r.text())
+    .then(svgText => {
+      const container = document.createElement('div');
+      container.style.display = 'none';
+      container.innerHTML = svgText;
+      document.body.insertBefore(container, document.body.firstChild);
+    })
+    .catch(err => console.error('Failed to load icons sprite sheet:', err));
+
   // Try to read settings from localStorage
   const savedIp = localStorage.getItem('kb_server_ip');
   const savedLang = localStorage.getItem('kb_lang');
@@ -428,19 +467,27 @@ const clearHistory = () => {
         <h1 style="font-size: 1.3rem; font-weight: 700; background: linear-gradient(135deg, #818cf8, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
           {{ t('title') }}
         </h1>
-        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px;">
+        <p v-if="!isZenMode" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px;">
           {{ t('subtitle') }}
         </p>
       </div>
       
-      <!-- Language Switcher Button -->
-      <button class="btn-secondary" style="min-height: 36px; padding: 6px 12px; font-size: 13px;" @click="currentLang = currentLang === 'en' ? 'kh' : 'en'">
-        🌐 {{ currentLang === 'en' ? 'ខ្មែរ' : 'English' }}
-      </button>
+      <div style="display: flex; gap: 8px;">
+        <!-- Zen Mode Button -->
+        <button class="btn-secondary" style="min-height: 36px; min-width: 36px; padding: 6px; font-size: 13px;" @click="isZenMode = !isZenMode" :title="isZenMode ? t('zenNormal') : t('zenActive')">
+          <svg class="icon-svg"><use :xlink:href="isZenMode ? '#icon-eye' : '#icon-eye-off'"></use></svg>
+        </button>
+
+        <!-- Language Switcher Button -->
+        <button class="btn-secondary" style="min-height: 36px; padding: 6px 12px; font-size: 13px;" @click="currentLang = currentLang === 'en' ? 'kh' : 'en'">
+          <svg class="icon-svg" style="margin-right: 4px;"><use xlink:href="#icon-globe"></use></svg>
+          {{ currentLang === 'en' ? 'ខ្មែរ' : 'English' }}
+        </button>
+      </div>
     </header>
 
     <!-- Connection Status & IP Configuration Card -->
-    <section class="glass-panel" style="padding: 16px; margin-bottom: 16px;">
+    <section v-if="!isZenMode" class="glass-panel" style="padding: 16px; margin-bottom: 16px;">
       <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px;">
         <span :class="['pulse-indicator', wsStatus === 'connected' ? 'pulse-connected' : 'pulse-disconnected']"></span>
         <span style="font-weight: 600; font-size: 0.9rem;">
@@ -465,7 +512,7 @@ const clearHistory = () => {
           @click="connectWS" 
           style="flex-shrink: 0;"
         >
-          🚀 {{ t('connect') }}
+          <svg class="icon-svg"><use xlink:href="#icon-rocket"></use></svg> {{ t('connect') }}
         </button>
         <button 
           v-else
@@ -473,7 +520,7 @@ const clearHistory = () => {
           @click="disconnectWS" 
           style="flex-shrink: 0;"
         >
-          🛑 {{ t('disconnect') }}
+          <svg class="icon-svg"><use xlink:href="#icon-stop"></use></svg> {{ t('disconnect') }}
         </button>
       </div>
     </section>
@@ -491,7 +538,7 @@ const clearHistory = () => {
         
         <div class="scanner-overlay" v-if="cameraStatus === 'running'">
           <div class="scanner-box-guide"></div>
-          <div class="laser-line"></div>
+          <div class="laser-line" v-if="showLaserLine"></div>
         </div>
 
         <div 
@@ -499,7 +546,9 @@ const clearHistory = () => {
           style="position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; background: rgba(0,0,0,0.6); color: var(--text-secondary); text-align: center; padding: 20px;"
         >
           <div>
-            <div style="margin-bottom: 8px; font-size: 1.5rem;">📷</div>
+            <div style="margin-bottom: 8px;">
+              <svg class="icon-svg" style="width: 32px; height: 32px;"><use xlink:href="#icon-camera"></use></svg>
+            </div>
             <div>{{ cameraStatus === 'starting' ? t('cameraStarting') : t('cameraErr') }}</div>
           </div>
         </div>
@@ -520,7 +569,8 @@ const clearHistory = () => {
         </select>
 
         <span style="font-size: 11px; background: rgba(255,255,255,0.06); padding: 4px 8px; border-radius: 4px; color: var(--text-muted);">
-          🔍 {{ decoderType === 'native' ? t('nativeDecoder') : t('fallbackDecoder') }}
+          <svg class="icon-svg" style="width: 12px; height: 12px; margin-right: 2px;"><use xlink:href="#icon-history"></use></svg>
+          {{ decoderType === 'native' ? t('nativeDecoder') : t('fallbackDecoder') }}
         </span>
       </div>
     </section>
@@ -531,8 +581,8 @@ const clearHistory = () => {
         {{ t('lastScanned') }}
       </h2>
       
-      <div v-if="lastCode" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.04); padding: 12px; border-radius: 8px; border: 1px dashed rgba(255,255,255,0.1);">
-        <code style="font-size: 1.2rem; font-weight: 700; color: var(--success); word-break: break-all;">
+      <div v-if="lastCode" style="display: flex; justify-content: space-between; align-items: center; background: #07070a; padding: 12px; border: 2px solid var(--border-color); box-shadow: inset 2px 2px 0px 0px rgba(0,0,0,0.8);">
+        <code style="font-family: var(--font-pixel); font-size: 2.2rem; font-weight: 700; color: var(--success); word-break: break-all; text-shadow: 0 0 10px var(--success-glow); line-height: 1;">
           {{ lastCode }}
         </code>
         <button 
@@ -540,6 +590,7 @@ const clearHistory = () => {
           style="min-height: 36px; padding: 6px 12px; font-size: 13px;"
           @click="copyToClipboard(lastCode, 'last')"
         >
+          <svg class="icon-svg"><use :xlink:href="copiedIndex === 'last' ? '#icon-check' : '#icon-copy'"></use></svg>
           {{ copiedIndex === 'last' ? t('copied') : t('copy') }}
         </button>
       </div>
@@ -549,30 +600,63 @@ const clearHistory = () => {
     </section>
 
     <!-- Settings Panel -->
-    <details class="glass-panel" style="padding: 16px; margin-bottom: 16px;">
+    <details v-if="!isZenMode" class="glass-panel" style="padding: 16px; margin-bottom: 16px;">
       <summary style="cursor: pointer; font-weight: 600; font-size: 0.9rem; color: var(--text-secondary); user-select: none;">
-        ⚙️ {{ t('settings') }}
+        <svg class="icon-svg" style="margin-right: 4px;"><use xlink:href="#icon-settings"></use></svg>
+        {{ t('settings') }}
       </summary>
       
       <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
         <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem;">
-          <span>🔊 {{ t('beepLabel') }}</span>
+          <span style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg class="icon-svg"><use xlink:href="#icon-volume"></use></svg>
+            {{ t('beepLabel') }}
+          </span>
           <input type="checkbox" v-model="beepOnScan" style="width: 20px; height: 20px; cursor: pointer;" />
         </label>
         
         <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem;">
-          <span>📳 {{ t('vibrateLabel') }}</span>
+          <span style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg class="icon-svg"><use xlink:href="#icon-vibrate"></use></svg>
+            {{ t('vibrateLabel') }}
+          </span>
           <input type="checkbox" v-model="vibrateOnScan" style="width: 20px; height: 20px; cursor: pointer;" />
         </label>
 
         <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem;">
-          <span>🛡️ {{ t('doubleVerifyLabel') }}</span>
+          <span style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg class="icon-svg"><use xlink:href="#icon-shield"></use></svg>
+            {{ t('doubleVerifyLabel') }}
+          </span>
           <input type="checkbox" v-model="requireDoubleVerification" style="width: 20px; height: 20px; cursor: pointer;" />
+        </label>
+
+        <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem;">
+          <span style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg class="icon-svg"><use xlink:href="#icon-camera"></use></svg>
+            {{ t('laserLabel') }}
+          </span>
+          <input type="checkbox" v-model="showLaserLine" style="width: 20px; height: 20px; cursor: pointer;" />
+        </label>
+
+        <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.9rem;">
+          <span style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg class="icon-svg"><use xlink:href="#icon-settings"></use></svg>
+            {{ t('themeLabel') }}
+          </span>
+          <select v-model="theme" class="ios-safe-input" style="width: auto; height: 36px; padding: 4px 10px; font-size: 13px; flex-shrink: 0;">
+            <option value="light">{{ t('themeLight') }}</option>
+            <option value="dark">{{ t('themeDark') }}</option>
+            <option value="system">{{ t('themeSystem') }}</option>
+          </select>
         </label>
 
         <label style="display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem;">
           <div style="display: flex; justify-content: space-between;">
-            <span>⏱️ {{ t('debounceLabel') }}</span>
+            <span style="display: inline-flex; align-items: center; gap: 6px;">
+              <svg class="icon-svg"><use xlink:href="#icon-clock"></use></svg>
+              {{ t('debounceLabel') }}
+            </span>
             <span style="color: var(--primary);">{{ debounceDelay }}ms</span>
           </div>
           <input type="range" min="500" max="5000" step="250" v-model.number="debounceDelay" style="cursor: pointer;" />
@@ -580,22 +664,24 @@ const clearHistory = () => {
       </div>
     </details>
 
-    <!-- Scan History List -->
-    <section v-if="historyList.length > 0" class="glass-panel" style="padding: 16px; flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; max-height: 250px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h2 style="font-size: 0.9rem; font-weight: 600; color: var(--text-secondary);">
-          📋 {{ t('history') }} ({{ historyList.length }})
-        </h2>
+    <!-- Scan History List (Collapsable, collapsed by default) -->
+    <details v-if="!isZenMode && historyList.length > 0" class="glass-panel" style="padding: 16px; margin-bottom: 16px;">
+      <summary style="cursor: pointer; font-weight: 600; font-size: 0.9rem; color: var(--text-secondary); user-select: none; display: flex; justify-content: space-between; align-items: center;">
+        <span style="display: inline-flex; align-items: center; gap: 6px;">
+          <svg class="icon-svg"><use xlink:href="#icon-history"></use></svg>
+          {{ t('history') }} ({{ historyList.length }})
+        </span>
         <button 
           class="btn-secondary" 
-          style="min-height: 28px; padding: 4px 8px; font-size: 11px; border-radius: 4px;"
-          @click="clearHistory"
+          style="min-height: 28px; padding: 4px 8px; font-size: 11px; border-radius: 4px; z-index: 10;"
+          @click.stop="clearHistory"
         >
-          🗑️ {{ t('clearHistory') }}
+          <svg class="icon-svg" style="width: 12px; height: 12px;"><use xlink:href="#icon-trash"></use></svg>
+          {{ t('clearHistory') }}
         </button>
-      </div>
+      </summary>
 
-      <div style="overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 8px;">
+      <div style="overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-top: 12px; max-height: 200px; padding-right: 4px;">
         <div 
           v-for="(item, idx) in historyList" 
           :key="idx" 
@@ -615,11 +701,12 @@ const clearHistory = () => {
             style="min-height: 32px; padding: 4px 8px; font-size: 11px; border-radius: 4px;"
             @click="copyToClipboard(item.code, idx)"
           >
+            <svg class="icon-svg" style="width: 12px; height: 12px;"><use :xlink:href="copiedIndex === idx ? '#icon-check' : '#icon-copy'"></use></svg>
             {{ copiedIndex === idx ? t('copied') : t('copy') }}
           </button>
         </div>
       </div>
-    </section>
+    </details>
   </div>
 </template>
 
