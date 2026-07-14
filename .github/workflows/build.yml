@@ -14,6 +14,8 @@ jobs:
   build:
     name: Build Standalone Windows EXE
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       # 1. Checkout Repository
@@ -46,8 +48,20 @@ jobs:
 
       - name: Install UV
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: 'server/requirements.txt'
 
-      # 4. Install Python Dependencies & Generate Build Assets
+      # 4. Cache PyInstaller build outputs to accelerate compilation
+      - name: PyInstaller Cache
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pyinstaller\Cache
+          key: ${{ runner.os }}-pyinstaller-${{ hashFiles('server/requirements.txt', 'server/app.py') }}
+          restore-keys: |
+            ${{ runner.os }}-pyinstaller-
+
+      # 5. Install Python Dependencies & Generate Build Assets
       - name: Install Dependencies & Generate Assets
         run: |
           cd server
@@ -55,13 +69,13 @@ jobs:
           python generate_ico.py
           python create_version_info.py
 
-      # 5. Compile Standalone Windowless Executable
+      # 6. Compile Standalone Windowless Executable
       - name: Build EXE with PyInstaller
         run: |
           cd server
           python -m PyInstaller --onefile --noconsole --name KeyBeam --icon=icon.ico --version-file=version_info.txt --add-data "../client/dist;client_dist" app.py
 
-      # 6. Upload Built Artifact
+      # 7. Upload Built Artifact
       - name: Upload KeyBeam.exe Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -69,7 +83,7 @@ jobs:
           path: server/dist/KeyBeam.exe
           if-no-files-found: error
 
-      # 7. Upload to GitHub Releases (Optional, only triggers on actual Tag Release publish)
+      # 8. Upload to GitHub Releases (Optional, only triggers on actual Tag Release publish)
       - name: Upload Binary to Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
