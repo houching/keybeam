@@ -1,0 +1,79 @@
+name: Build KeyBeam Executable
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build Standalone Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      # 1. Checkout Repository
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js & Build Web Client
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'client/package-lock.json'
+
+      - name: Install Node Dependencies
+        run: |
+          cd client
+          npm ci
+
+      - name: Build Web Client
+        run: |
+          cd client
+          npm run build
+
+      # 3. Setup Python & UV Package Manager
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+
+      # 4. Install Python Dependencies & Generate Build Assets
+      - name: Install Dependencies & Generate Assets
+        run: |
+          cd server
+          uv pip install --system -r requirements.txt
+          python generate_ico.py
+          python create_version_info.py
+
+      # 5. Compile Standalone Windowless Executable
+      - name: Build EXE with PyInstaller
+        run: |
+          cd server
+          python -m PyInstaller --onefile --noconsole --name KeyBeam --icon=icon.ico --version-file=version_info.txt --add-data "../client/dist;client_dist" app.py
+
+      # 6. Upload Built Artifact
+      - name: Upload KeyBeam.exe Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KeyBeam-Windows-Standalone
+          path: server/dist/KeyBeam.exe
+          if-no-files-found: error
+
+      # 7. Upload to GitHub Releases (Optional, only triggers on actual Tag Release publish)
+      - name: Upload Binary to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: server/dist/KeyBeam.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
