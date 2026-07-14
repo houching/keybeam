@@ -152,9 +152,7 @@ def start_static_file_server(directory: str, port: int = 5173):
     except Exception as e:
         logger.warning(f"Could not start static HTTP server: {e}")
 
-async def main():
-    ws_port = 3000
-    http_port = 5173
+async def main(ws_port: int = 3000, http_port: int = 5173):
     host = "0.0.0.0"
     
     # Locate client web assets (check local folder or PyInstaller temporary bundle paths)
@@ -210,10 +208,10 @@ def create_tray_image():
         # Fallback to a solid color 64x64 image
         return Image.new('RGB', (64, 64), color=(0, 255, 127))
 
-def setup_tray(loop):
+def setup_tray(loop, http_port: int = 5173):
     """Initializes and starts the system tray icon on the main thread."""
     def open_browser(icon, item):
-        webbrowser.open("http://localhost:5173")
+        webbrowser.open(f"http://localhost:{http_port}")
 
     def stop_all(icon, item):
         logger.info("Stopping KeyBeam server via Tray menu...")
@@ -238,20 +236,177 @@ def setup_tray(loop):
     logger.info("System Tray Icon starting...")
     icon.run()
 
+def load_config(config_path: str) -> dict:
+    """Loads ports from config.cfg if present, otherwise returns defaults."""
+    config = {"ws_port": 3000, "http_port": 5173}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip().lower()
+                        v = v.strip()
+                        if k in ("ws_port", "http_port"):
+                            config[k] = int(v)
+            logger.info(f"Loaded config from {config_path}: ws={config['ws_port']}, http={config['http_port']}")
+        except Exception as e:
+            logger.warning(f"Error reading config: {e}")
+    return config
+
+def save_config(config_path: str, ws_port: int, http_port: int):
+    """Saves ports to config.cfg."""
+    try:
+        with open(config_path, "w") as f:
+            f.write(f"ws_port={ws_port}\n")
+            f.write(f"http_port={http_port}\n")
+        logger.info(f"Saved config to {config_path}")
+    except Exception as e:
+        logger.error(f"Error writing config: {e}")
+
+def prompt_ports_gui(default_ws: int, default_http: int) -> dict:
+    """Shows a Tkinter dialog on the main thread to configure ports."""
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        
+        result = {"ws_port": default_ws, "http_port": default_http, "cancelled": False}
+        
+        root = tk.Tk()
+        root.title("KeyBeam Configuration")
+        root.geometry("320x180")
+        root.resizable(False, False)
+        
+        # Center window
+        root.update_idletasks()
+        width = root.winfo_width()
+        height = root.winfo_height()
+        x = (root.winfo_screenwidth() // 2) - (width // 2)
+        y = (root.winfo_screenheight() // 2) - (height // 2)
+        root.geometry(f"+{x}+{y}")
+        
+        frame = tk.Frame(root, padx=15, pady=15)
+        frame.pack(fill=tk.BOTH, expand=True)
+        
+        tk.Label(frame, text="WebSocket Port:").grid(row=0, column=0, sticky="w", pady=5)
+        ws_entry = tk.Entry(frame, width=15)
+        ws_entry.insert(0, str(default_ws))
+        ws_entry.grid(row=0, column=1, pady=5, padx=5)
+        
+        tk.Label(frame, text="Web App Port:").grid(row=1, column=0, sticky="w", pady=5)
+        http_entry = tk.Entry(frame, width=15)
+        http_entry.insert(0, str(default_http))
+        http_entry.grid(row=1, column=1, pady=5, padx=5)
+        
+        def on_submit():
+            try:
+                ws_val = int(ws_entry.get().strip())
+                http_val = int(http_entry.get().strip())
+                if ws_val <= 0 or http_val <= 0 or ws_val > 65535 or http_val > 65535:
+                    raise ValueError("Port must be between 1 and 65535.")
+                result["ws_port"] = ws_val
+                result["http_port"] = http_val
+                root.destroy()
+            except ValueError as ex:
+                messagebox.showerror("Invalid Input", f"Please enter valid port numbers:\n{ex}")
+                
+        def on_cancel():
+            result["cancelled"] = True
+            root.destroy()
+            
+        root.protocol("WM_DELETE_WINDOW", on_cancel)
+        
+        btn_frame = tk.Frame(frame)
+        btn_frame.grid(row=2, column=0, columnspan=2, pady=15)
+        
+        submit_btn = tk.Button(btn_frame, text="Start Server", command=on_submit, width=12)
+        submit_btn.pack(side=tk.LEFT, padx=5)
+        
+        cancel_btn = tk.Button(btn_frame, text="Cancel", command=on_cancel, width=10)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        root.mainloop()
+        return result
+    except Exception as e:
+        logger.error(f"Failed to show GUI dialog: {e}")
+        return {"ws_port": default_ws, "http_port": default_http, "cancelled": False}
+
 if __name__ == "__main__":
+    import argparse
+
+    # Parse arguments
+    parser = argparse.ArgumentParser(description="KeyBeam Barcode Bridge Server")
+    parser.add_argument("--ws-port", type=int, default=None, help="Port for the WebSocket server")
+    parser.add_argument("--http-port", type=int, default=None, help="Port for the Web App HTTP server")
+    parser.add_argument("--interactive", action="store_true", help="Prompt for custom ports interactively in CLI")
+    args = parser.parse_args()
+
+    # Determine config file path (in the same directory as script or packaged .exe)
+    if getattr(sys, 'frozen', False):
+        app_dir = os.path.dirname(sys.executable)
+    else:
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(app_dir, "config.cfg")
+
+    # Load configuration
+    config = load_config(config_path)
+    ws_port = config["ws_port"]
+    http_port = config["http_port"]
+
+    # CLI arguments override config
+    if args.ws_port is not None:
+        ws_port = args.ws_port
+    if args.http_port is not None:
+        http_port = args.http_port
+
+    # If running interactively via CLI flag/stdin, ask in console; otherwise prompt with GUI on startup if no CLI args are given
+    has_cli_ports = (args.ws_port is not None or args.http_port is not None)
+    
+    if not has_cli_ports:
+        if args.interactive or (sys.stdin is not None and sys.stdin.isatty()):
+            # CLI Interactive prompt
+            try:
+                if sys.stdout is not None:
+                    sys.stdout.write("Would you like to configure custom ports? (y/N): ")
+                    sys.stdout.flush()
+                choice = input().strip().lower()
+                if choice in ('y', 'yes'):
+                    ws_input = input(f"Enter WebSocket Port [{ws_port}]: ").strip()
+                    if ws_input:
+                        ws_port = int(ws_input)
+                    http_input = input(f"Enter Web App HTTP Port [{http_port}]: ").strip()
+                    if http_input:
+                        http_port = int(http_input)
+                    save_config(config_path, ws_port, http_port)
+            except (KeyboardInterrupt, SystemExit):
+                logger.info("Configuration cancelled by user.")
+                sys.exit(0)
+            except Exception as e:
+                logger.warning(f"Error during interactive port configuration: {e}. Using defaults.")
+        else:
+            # GUI Interactive Prompt
+            gui_result = prompt_ports_gui(ws_port, http_port)
+            if gui_result["cancelled"]:
+                logger.info("Configuration cancelled via GUI. Exiting.")
+                sys.exit(0)
+            ws_port = gui_result["ws_port"]
+            http_port = gui_result["http_port"]
+            save_config(config_path, ws_port, http_port)
+
     try:
         # Initialize event loop
         loop = asyncio.new_event_loop()
         
         # Start event loop in a background daemon thread
         async_thread = threading.Thread(
-            target=lambda: loop.run_until_complete(main()), 
+            target=lambda: loop.run_until_complete(main(ws_port, http_port)), 
             daemon=True
         )
         async_thread.start()
         
         # Start pystray system tray on the main thread (blocking)
-        setup_tray(loop)
+        setup_tray(loop, http_port)
     except KeyboardInterrupt:
         logger.info("Server stopped by user request.")
     except Exception as e:

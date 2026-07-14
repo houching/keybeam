@@ -19,3 +19,7 @@ server/*.spec
 # OS
 .DS_Store
 Thumbs.db
+
+# Config
+server/config.cfg
+config.cfg

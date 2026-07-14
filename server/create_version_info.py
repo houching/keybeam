@@ -1,8 +1,8 @@
 VERSION_INFO_CONTENT = """# -*- coding: utf-8 -*-
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(1, 1, 0, 0),
+    prodvers=(1, 1, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -18,12 +18,12 @@ VSVersionInfo(
           [
             StringStruct('CompanyName', "Steve's Khmer Apps"),
             StringStruct('FileDescription', 'KeyBeam Barcode Bridge'),
-            StringStruct('FileVersion', '1.0.0.0'),
+            StringStruct('FileVersion', '1.1.0.0'),
             StringStruct('InternalName', 'KeyBeam'),
             StringStruct('LegalCopyright', 'Copyright (c) 2026 Steve. All rights reserved.'),
             StringStruct('OriginalFilename', 'KeyBeam.exe'),
             StringStruct('ProductName', 'KeyBeam'),
-            StringStruct('ProductVersion', '1.0.0.0')
+            StringStruct('ProductVersion', '1.1.0.0')
           ]
         )
       ]

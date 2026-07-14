@@ -7,6 +7,7 @@ const i18n = {
     title: 'KeyBeam',
     subtitle: 'Wireless Barcode Keyboard Bridge',
     serverIp: 'Server IP / Host',
+    wsPort: 'Port',
     connect: 'Connect',
     disconnect: 'Disconnect',
     statusConnected: 'Connected',
@@ -43,6 +44,7 @@ const i18n = {
     title: 'KeyBeam',
     subtitle: 'ស្កេនបាកូដបញ្ជូនទៅកុំព្យូទ័រឥតខ្សែ',
     serverIp: 'អាសយដ្ឋាន IP ម៉ាស៊ីនបម្រើ',
+    wsPort: 'ច្រក',
     connect: 'ភ្ជាប់',
     disconnect: 'ផ្ដាច់',
     statusConnected: 'បានភ្ជាប់',
@@ -85,6 +87,7 @@ const t = (key) => {
 
 // State Variables
 const serverIp = ref('');
+const serverWsPort = ref('3000');
 const wsStatus = ref('disconnected'); // 'disconnected' | 'connecting' | 'connected'
 const lastCode = ref('');
 const historyList = ref([]);
@@ -143,6 +146,7 @@ onMounted(() => {
 
   // Try to read settings from localStorage
   const savedIp = localStorage.getItem('kb_server_ip');
+  const savedWsPort = localStorage.getItem('kb_server_ws_port');
   const savedLang = localStorage.getItem('kb_lang');
   
   if (savedLang) currentLang.value = savedLang;
@@ -150,6 +154,7 @@ onMounted(() => {
   // URL Param priority
   const urlParams = new URLSearchParams(window.location.search);
   const paramIp = urlParams.get('server');
+  const paramWsPort = urlParams.get('ws_port');
   
   if (paramIp) {
     serverIp.value = paramIp;
@@ -158,6 +163,14 @@ onMounted(() => {
   } else {
     // Dynamic host fallback depending on what address the client accessed
     serverIp.value = window.location.hostname || 'localhost';
+  }
+
+  if (paramWsPort) {
+    serverWsPort.value = paramWsPort;
+  } else if (savedWsPort) {
+    serverWsPort.value = savedWsPort;
+  } else {
+    serverWsPort.value = '3000';
   }
 
   // Detect decoder support
@@ -187,6 +200,7 @@ const connectWS = () => {
   disconnectWS();
   wsStatus.value = 'connecting';
   localStorage.setItem('kb_server_ip', serverIp.value);
+  localStorage.setItem('kb_server_ws_port', serverWsPort.value);
 
   // Parse websocket target dynamically based on current page protocol
   const isSecure = window.location.protocol === 'https:';
@@ -197,11 +211,12 @@ const connectWS = () => {
   if (host.startsWith('ws://') || host.startsWith('wss://')) {
     targetUrl = host;
   } else {
-    // If accessing via domain proxy, connect directly on the hostname without port 3000
+    // If accessing via domain proxy, connect directly on the hostname without port
     if (host === window.location.hostname || host === window.location.host) {
       targetUrl = `${protocol}//${host}/ws`;
     } else {
-      targetUrl = `${protocol}//${host}:3000/ws`;
+      const portToUse = serverWsPort.value ? serverWsPort.value.trim() : '3000';
+      targetUrl = `${protocol}//${host}:${portToUse}/ws`;
     }
   }
 
@@ -519,13 +534,21 @@ const clearHistory = () => {
           style="flex-shrink: 0;"
         ></span>
         
-        <div style="flex-grow: 1;">
+        <div style="flex-grow: 1; display: flex; gap: 6px;">
           <input 
             type="text" 
             v-model="serverIp" 
             placeholder="e.g. 192.168.1.100" 
             class="ios-safe-input" 
-            style="height: 38px; padding: 6px 10px; font-size: 14px;"
+            style="flex: 2; height: 38px; padding: 6px 10px; font-size: 16px; min-width: 0;"
+            :disabled="wsStatus === 'connected'" 
+          />
+          <input 
+            type="number" 
+            v-model="serverWsPort" 
+            :placeholder="t('wsPort')" 
+            class="ios-safe-input" 
+            style="flex: 1; min-width: 70px; max-width: 90px; height: 38px; padding: 6px 10px; font-size: 16px;"
             :disabled="wsStatus === 'connected'" 
           />
         </div>

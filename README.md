@@ -34,6 +34,17 @@ The Python server runs on your Windows computer, listens for incoming barcode pa
    uv run app.py
    ```
 
+#### 🎛️ Custom Ports & Settings:
+- On startup (when run as a windowless app or double-clicked), KeyBeam displays a desktop GUI popup dialog to configure ports. The settings are saved in a `config.cfg` file in the same directory.
+- You can customize or override ports via CLI arguments:
+  ```bash
+  # Override ports
+  uv run app.py --ws-port 3005 --http-port 5178
+
+  # Prompt for ports in the terminal
+  uv run app.py --interactive
+  ```
+
 #### 🔍 Finding your Windows LAN IP Address
 1. Run `ipconfig` in PowerShell/CMD.
 2. Look for the **IPv4 Address** under your active adapter (usually `Wireless LAN adapter Wi-Fi` or `Ethernet adapter`).
@@ -103,7 +114,7 @@ keybeam.yourdomain.com {
 
 ## 📦 Single Standalone Binary Compilation
 
-You can compile both the Vue Web Client and the Python Server into a **single, standalone `.exe` binary** for easy distribution. When the compiled binary runs, it hosts the client web application (on port `5173`) and operates the WebSocket bridge (on port `3000`) simultaneously with **zero external dependencies**.
+You can compile both the Vue Web Client and the Python Server into a **single, standalone `.exe` binary** for easy distribution. When the compiled binary runs, it prompts the user to configure ports via a desktop GUI popup (pre-populating from `config.cfg`), then hosts the client web application and operates the WebSocket bridge simultaneously with **zero external dependencies**.
 
 ### Build Instructions:
 
@@ -128,9 +139,9 @@ You can compile both the Vue Web Client and the Python Server into a **single, s
 
 3. **Run the Binary**:
    - The compiled standalone executable will be saved in `server/dist/KeyBeam.exe`.
-   - Double-clicking `KeyBeam.exe` launches the complete **KeyBeam** ecosystem in the background (no console window will appear).
+   - Double-clicking `KeyBeam.exe` launches the configuration dialog popup. After clicking **Start Server**, it runs KeyBeam in the background (no console window will appear).
    - A neon green scanner icon will appear in your **Windows System Tray** (near the clock).
    - **Right-click the System Tray Icon** to:
-     - **Open Web Client**: Launches `http://localhost:5173/` in your default browser.
+     - **Open Web Client**: Launches the client in your default browser on the configured Web App port.
      - **Exit**: Cleanly terminates the background HTTP and WebSocket servers.
 
