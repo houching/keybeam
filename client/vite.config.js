@@ -8,6 +8,7 @@ export default defineConfig({
   ],
   server: {
     host: true, // expose to local network
-    port: 5173
+    port: 5173,
+    allowedHosts: ['barcode.ez9.us']
   }
 })

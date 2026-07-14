@@ -29,6 +29,7 @@ const i18n = {
     beepLabel: 'Beep on Scan',
     vibrateLabel: 'Vibrate on Scan',
     debounceLabel: 'Debounce Delay (ms)',
+    doubleVerifyLabel: 'Anti-Ghost Scan (require 2 reads)',
   },
   kh: {
     title: 'ស្កេនបាកូដភ្ជាប់ទៅកុំព្យូទ័រ',
@@ -56,6 +57,7 @@ const i18n = {
     beepLabel: 'បន្លឺសំឡេងពេលស្កេន',
     vibrateLabel: 'ញ័រទូរស័ព្ទពេលស្កេន',
     debounceLabel: 'រយៈពេលផ្អាកស្កេនស្ទួន (ms)',
+    doubleVerifyLabel: 'ការពារស្កេនខុស (ត្រូវការស្កេន ២ដង)',
   }
 };
 
@@ -80,10 +82,13 @@ const decoderType = ref('detecting'); // 'detecting' | 'native' | 'wasm'
 const beepOnScan = ref(true);
 const vibrateOnScan = ref(true);
 const debounceDelay = ref(1500); // 1.5s debounce default
+const requireDoubleVerification = ref(true); // verify code in 2 consecutive frames to prevent ghost/garbled scans
 
 // Scanned history tracking
 const lastScanTime = ref(0);
 const copiedIndex = ref(null);
+const lastScanCandidate = ref('');
+const scanCandidateCount = ref(0);
 
 let ws = null;
 let reconnectTimeout = null;
@@ -298,6 +303,24 @@ const triggerVibration = () => {
   }
 };
 
+// Verify scans across consecutive frames to prevent misreads
+const processScanCandidate = (codeValue) => {
+  if (!requireDoubleVerification.value) {
+    handleBarcodeFound(codeValue);
+    return;
+  }
+  
+  if (codeValue === lastScanCandidate.value) {
+    scanCandidateCount.value++;
+    if (scanCandidateCount.value >= 2) {
+      handleBarcodeFound(codeValue);
+    }
+  } else {
+    lastScanCandidate.value = codeValue;
+    scanCandidateCount.value = 1;
+  }
+};
+
 // Process scanned value
 const handleBarcodeFound = (codeValue) => {
   const now = Date.now();
@@ -340,10 +363,12 @@ const scanFrameLoop = async () => {
   // Ensure video metadata and dimensions are loaded
   if (videoElement.value.readyState === videoElement.value.HAVE_ENOUGH_DATA) {
     try {
+      let decodedValue = null;
+
       if (decoderType.value === 'native' && barcodeDetector) {
         const barcodes = await barcodeDetector.detect(videoElement.value);
         if (barcodes && barcodes.length > 0) {
-          handleBarcodeFound(barcodes[0].rawValue);
+          decodedValue = barcodes[0].rawValue;
         }
       } else if (decoderType.value === 'wasm' && zxingReaderModule) {
         // Render current video frame to an offscreen canvas
@@ -359,9 +384,17 @@ const scanFrameLoop = async () => {
           // Use zxing-wasm to read barcodes from imageData
           const results = await zxingReaderModule.readBarcodesFromImageData(imgData);
           if (results && results.length > 0) {
-            handleBarcodeFound(results[0].text);
+            decodedValue = results[0].text;
           }
         }
+      }
+
+      if (decodedValue) {
+        processScanCandidate(decodedValue);
+      } else {
+        // Reset validation counter if no code is detected in this frame
+        scanCandidateCount.value = 0;
+        lastScanCandidate.value = '';
       }
     } catch (err) {
       // Avoid spamming error console logs on every single frame loop
@@ -530,6 +563,11 @@ const clearHistory = () => {
         <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem;">
           <span>📳 {{ t('vibrateLabel') }}</span>
           <input type="checkbox" v-model="vibrateOnScan" style="width: 20px; height: 20px; cursor: pointer;" />
+        </label>
+
+        <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem;">
+          <span>🛡️ {{ t('doubleVerifyLabel') }}</span>
+          <input type="checkbox" v-model="requireDoubleVerification" style="width: 20px; height: 20px; cursor: pointer;" />
         </label>
 
         <label style="display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem;">
